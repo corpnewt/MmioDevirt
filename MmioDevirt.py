@@ -81,6 +81,7 @@ class MmioDevirt:
                 print("")
                 self.u.grab("Press [enter] to return...")
                 continue
+            print("Got {:,} entr{}...".format(len(mmio_devirt),"y" if len(mmio_devirt)==1 else "ies"))
             print("Dumping to plist data...")
             print("")
             print("")
