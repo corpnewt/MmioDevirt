@@ -67,7 +67,7 @@ class MmioDevirt:
                     mmio_devirt.append({
                         "Comment" : "MMIO devirt {}".format(addr),
                         "Address" : int(addr,16),
-                        "Enabled" : True
+                        "Enabled" : False
                     })
                 except Exception as e:
                     print(" - Failed: {}".format(e))
