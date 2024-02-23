@@ -63,9 +63,17 @@ class MmioDevirt:
                 # Primed, get the address
                 try:
                     addr = l.split("OCABC: MMIO devirt ")[1].split(" (")[0]
+                    try:
+                        pages = int(l.split("(")[1].split()[0],16)
+                        page = " (0x{} page{})".format(
+                            hex(pages)[2:].upper(),
+                            "" if pages == 1 else "s"
+                        )
+                    except:
+                        page = ""
                     print("Located MMIO devirt at {}".format(addr))
                     mmio_devirt.append({
-                        "Comment" : "MMIO devirt {}".format(addr),
+                        "Comment" : "MMIO devirt {}{}".format(addr,page),
                         "Address" : int(addr,16),
                         "Enabled" : False
                     })
