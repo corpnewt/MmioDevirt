@@ -92,11 +92,27 @@ class MmioDevirt:
                 continue
             print("Got {:,} entr{}...".format(len(mmio_devirt),"y" if len(mmio_devirt)==1 else "ies"))
             print("Dumping to plist data...")
+            # Add some comments that further show users where to start and stop copying
+            plist_parts = []
+            for line in plist.dumps({"Booter":{"MmioWhitelist":mmio_devirt}}).strip().split("\n"):
+                if "</array>" in line:
+                    plist_parts.extend((
+                        "",
+                        line.split("<")[0]+"<!-- END COPYING HERE -->",
+                        ""
+                    ))
+                plist_parts.append(line)
+                if "<array>" in line:
+                    plist_parts.extend((
+                        "",
+                        line.split("<")[0]+"<!-- START COPYING HERE -->",
+                        ""
+                    ))
             print("")
             print("")
             print("------------------ Start Plist Data ------------------")
             print("")
-            print(plist.dumps({"Booter":{"MmioWhitelist":mmio_devirt}}).strip())
+            print("\n".join(plist_parts))
             print("")
             print("------------------- End Plist Data -------------------")
             print("")
