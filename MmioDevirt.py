@@ -145,6 +145,7 @@ class MmioDevirt:
             print("Located MMIO devirt at {}".format(addr))
             enabled = False
             addr_int = int(addr,16)
+            matches = []
             if self.cr2 and pages:
                 # Check the address and see if any of our CR2 addresses fall
                 # within that
@@ -156,7 +157,6 @@ class MmioDevirt:
                     hex(start)[2:].upper(),
                     hex(end)[2:].upper()
                 ))
-                matches = []
                 for c in self.cr2:
                     if start <= c <= end:
                         # Got a match
