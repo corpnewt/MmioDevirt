@@ -142,37 +142,35 @@ class MmioDevirt:
             except:
                 pages = 0
                 page = ""
-            print("Located MMIO devirt at {}".format(addr))
+            print("Located MMIO devirt: {}{}".format(addr,page))
             enabled = False
-            addr_int = int(addr,16)
             matches = []
+            start = int(addr,16)
+            end   = (start + pages * 4096) - 1
+            print(" - Range: 0x{} -> 0x{}".format(
+                hex(start)[2:].upper(),
+                hex(end)[2:].upper()
+            ))
             if self.cr2 and pages:
                 # Check the address and see if any of our CR2 addresses fall
                 # within that
-                start = addr_int
-                end   = (addr_int + pages * 4096) - 1
-                print(" - {}{}: 0x{} -> 0x{}".format(
-                    addr,
-                    page,
-                    hex(start)[2:].upper(),
-                    hex(end)[2:].upper()
-                ))
                 for c in self.cr2:
                     if start <= c <= end:
                         # Got a match
                         matches.append("0x{}".format(hex(c)[2:].upper()))
                         if not c in cr2_found:
                             cr2_found.append(c)
-                        enabled = True
                 if matches:
-                    print(" -> Matches {} - Enabling".format(", ".join(matches)))
+                    print(" -> Matched CR2: {}".format(", ".join(matches)))
+                    print(" -> Enabling...")
+                    enabled = True
             mmio_devirt.append({
                 "Comment" : "MMIO devirt {}{}{}".format(
                     addr,
                     page,
                     " - Matched CR2: {}".format(", ".join(matches)) if matches else ""
                 ),
-                "Address" : addr_int,
+                "Address" : start,
                 "Enabled" : enabled
             })
             #except Exception as e:
