@@ -279,6 +279,13 @@ class MmioDevirt:
             for x in sorted(not_found):
                 print(" - 0x{}".format(hex(x)[2:].upper()))
             print("")
+        if all(x.get("Enabled") for x in mmio_devirt):
+            # Everything was whitelisted
+            print("!! WARNING !!\n")
+            print("All MmioWhitelist entries are Enabled!")
+            print("This is equivalent to disabling DevirtualiseMmio!")
+            print("\n!! WARNING !!")
+            print("")
         self.u.grab("Press [enter] to return...")
 
 if __name__ == '__main__':
