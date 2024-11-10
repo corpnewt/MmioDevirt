@@ -6,7 +6,46 @@ class MmioDevirt:
     def __init__(self):
         self.u = utils.Utils("MmioDevirt")
         self.log = None
+        self.auto_disable = 0
+        self.auto_disable_print = {
+            0:"Disabled",
+            1:"Big Sur and Later ~200 MB",
+            2:"Catalina and Prior ~128 MB"
+        }
+        self.auto_disable_size = {
+            0:0,
+            1:200 * 1024 ** 2, # 200 MB
+            2:128 * 1024 ** 2, # 128 MB
+        }
         self.cr2 = []
+
+
+    def get_size(self, size, suffix=None, round_to=2, strip_zeroes=False):
+        # Failsafe in case our size is unknown
+        if size == -1:
+            return "Unknown"
+        ext = ["B","KB","MB","GB","TB","PB"]
+        div = 1024
+        s = float(size)
+        s_dict = {} # Initialize our dict
+        # Iterate the ext list, and divide by 1000 or 1024 each time to setup the dict {ext:val}
+        for e in ext:
+            s_dict[e] = s
+            s /= div
+        # Get our suffix if provided - will be set to None if not found, or if started as None
+        suffix = next((x for x in ext if x.lower() == suffix.lower()),None) if suffix else suffix
+        # Get the largest value that's still over 1
+        biggest = suffix if suffix else next((x for x in ext[::-1] if s_dict[x] >= 1), "B")
+        # Determine our rounding approach - first make sure it's an int; default to 2 on error
+        try:round_to=int(round_to)
+        except:round_to=2
+        round_to = 0 if round_to < 0 else 15 if round_to > 15 else round_to # Ensure it's between 0 and 15
+        bval = round(s_dict[biggest], round_to)
+        # Split our number based on decimal points
+        a,b = str(bval).split(".")
+        # Check if we need to strip or pad zeroes
+        b = b.rstrip("0") if strip_zeroes else b.ljust(round_to,"0") if round_to > 0 else ""
+        return "{:,}{} {}".format(int(a),"" if not b else "."+b,biggest)
 
     def get_log(self):
         while True:
@@ -61,6 +100,9 @@ class MmioDevirt:
             print("")
             print("L. Select Debug OpenCore Log")
             print("C. Clear All CR2 Addresses")
+            print("A. Auto-Enable Entries Based On Size (Currently: {})".format(
+                self.auto_disable_print.get(self.auto_disable,"Disabled")
+            ))
             print("P. Process Debug OpenCore Log")
             print("")
             print("Q. Quit")
@@ -77,6 +119,10 @@ class MmioDevirt:
             menu_path = self.u.check_path(menu)
             if menu.lower() == "q":
                 self.u.custom_quit()
+            elif menu.lower() == "a":
+                self.auto_disable += 1
+                if self.auto_disable > 2:
+                    self.auto_disable = 0
             elif menu.lower() == "l":
                 self.log = self.get_log()
             elif menu.lower() == "c":
@@ -135,15 +181,18 @@ class MmioDevirt:
             addr = l.split("OCABC: MMIO devirt ")[1].split(" (")[0]
             try:
                 pages = int(l.split("(")[1].split()[0],16)
-                page = " (0x{} page{})".format(
+                size = self.get_size(pages*4096,strip_zeroes=True)
+                page = " (0x{} page{} - {})".format(
                     hex(pages)[2:].upper(),
-                    "" if pages == 1 else "s"
+                    "" if pages == 1 else "s",
+                    size
                 )
             except:
                 pages = 0
                 page = ""
             print("Located MMIO devirt: {}{}".format(addr,page))
             enabled = False
+            comment = ""
             matches = []
             start = int(addr,16)
             end   = (start + pages * 4096) - 1
@@ -151,24 +200,36 @@ class MmioDevirt:
                 hex(start)[2:].upper(),
                 hex(end)[2:].upper()
             ))
-            if self.cr2 and pages:
-                # Check the address and see if any of our CR2 addresses fall
-                # within that
-                for c in self.cr2:
-                    if start <= c <= end:
-                        # Got a match
-                        matches.append("0x{}".format(hex(c)[2:].upper()))
-                        if not c in cr2_found:
-                            cr2_found.append(c)
-                if matches:
-                    print(" -> Matched CR2: {}".format(", ".join(matches)))
+            if pages:
+                # Check if we have a CR2 address match - and if not
+                # check entry size if auto enabling
+                if self.cr2:
+                    # Check the address and see if any of our CR2 addresses fall
+                    # within that
+                    for c in self.cr2:
+                        if start <= c <= end:
+                            # Got a match
+                            matches.append("0x{}".format(hex(c)[2:].upper()))
+                            if not c in cr2_found:
+                                cr2_found.append(c)
+                    if matches:
+                        print(" -> Matched CR2: {}".format(", ".join(matches)))
+                        print(" -> Enabling...")
+                        comment = " - Matched CR2: {}".format(", ".join(matches))
+                        enabled = True
+                # Only check entry size if auto enabling, and not already
+                # enabled
+                if self.auto_disable and not enabled and \
+                pages * 4096 < self.auto_disable_size.get(self.auto_disable,0):
+                    print(" -> Cannot Fit Kernel")
                     print(" -> Enabling...")
+                    comment = " - Cannot Fit Kernel"
                     enabled = True
             mmio_devirt.append({
                 "Comment" : "MMIO devirt {}{}{}".format(
                     addr,
                     page,
-                    " - Matched CR2: {}".format(", ".join(matches)) if matches else ""
+                    comment
                 ),
                 "Address" : start,
                 "Enabled" : enabled
