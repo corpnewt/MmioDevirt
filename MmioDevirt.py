@@ -7,18 +7,36 @@ class MmioDevirt:
         self.u = utils.Utils("MmioDevirt")
         self.log = None
         self.auto_disable = 0
-        self.auto_disable_print = {
-            0:"Disabled",
-            1:"Big Sur and Later ~200 MB",
-            2:"Catalina and Prior ~128 MB"
-        }
-        self.auto_disable_size = {
-            0:0,
-            1:200 * 1024 ** 2, # 200 MB
-            2:128 * 1024 ** 2, # 128 MB
+        self.auto_disable_dict = {
+                          0:"Disabled",
+            128 * 1024 ** 2:"Extremely Lucky <= 128 MB",
+            64  * 1024 ** 2:"Very Lucky <= 64 MB",
+            32  * 1024 ** 2:"Lucky <= 32 MB"
         }
         self.cr2 = []
 
+    def _get_at_index(self, list_var, index=0, default=None):
+        if index >= len(list_var):
+            if default is not None:
+                # Out of range, use the default
+                return default
+            # Too much - roll over as needed
+            index = index % len(list_var)
+        elif index < 0 and abs(index) > len(list_var):
+            if default is not None:
+                # Out of range, use the default
+                return default
+            # Too smol - set to 0
+            index = 0
+        return list_var[index]
+
+    def get_key_at_index(self, dict_var, index=0, default=None):
+        # Helper to get the key at the specific index of the passed dict_var
+        return self._get_at_index(list(dict_var),index=index,default=default)
+
+    def get_value_at_index(self, dict_var, index=0, default=None):
+        # Helper to get the value at the specific index of the passed dict_var
+        return self._get_at_index(list(dict_var.values()),index=index,default=default)
 
     def get_size(self, size, suffix=None, round_to=2, strip_zeroes=False):
         # Failsafe in case our size is unknown
@@ -101,7 +119,11 @@ class MmioDevirt:
             print("L. Select Debug OpenCore Log")
             print("C. Clear All CR2 Addresses")
             print("A. Auto-Enable Entries Based On Size (Currently: {})".format(
-                self.auto_disable_print.get(self.auto_disable,"Disabled")
+                self.get_value_at_index(
+                    self.auto_disable_dict,
+                    index=self.auto_disable,
+                    default="Disabled"
+                )
             ))
             print("P. Process Debug OpenCore Log")
             print("")
@@ -120,9 +142,7 @@ class MmioDevirt:
             if menu.lower() == "q":
                 self.u.custom_quit()
             elif menu.lower() == "a":
-                self.auto_disable += 1
-                if self.auto_disable > 2:
-                    self.auto_disable = 0
+                self.auto_disable = (self.auto_disable + 1) % len(self.auto_disable_dict)
             elif menu.lower() == "l":
                 self.log = self.get_log()
             elif menu.lower() == "c":
@@ -151,6 +171,19 @@ class MmioDevirt:
             self.log = self.get_log()
         if not self.log or not os.path.isfile(self.log):
             return # No log to process
+        # Get our size threshold value if possible
+        try:
+            size_threshold_value = self.get_size(
+                self.get_key_at_index(
+                    self.auto_disable_dict,
+                    index=self.auto_disable,
+                    default=0
+                ),
+                strip_zeroes=True
+            )
+        except Exception:
+            # Fall back on a generic size statement
+            size_threshold_value = "Size"
         # Should have a valid path - try to open as text
         self.u.head()
         print("")
@@ -177,65 +210,69 @@ class MmioDevirt:
             if not mmio_primed:
                 continue
             # Primed, get the address
-            #try:
-            addr = l.split("OCABC: MMIO devirt ")[1].split(" (")[0]
             try:
-                pages = int(l.split("(")[1].split()[0],16)
-                size = self.get_size(pages*4096,strip_zeroes=True)
-                page = " (0x{} page{} - {})".format(
-                    hex(pages)[2:].upper(),
-                    "" if pages == 1 else "s",
-                    size
-                )
-            except:
-                pages = 0
-                page = ""
-            print("Located MMIO devirt: {}{}".format(addr,page))
-            enabled = False
-            comment = ""
-            matches = []
-            start = int(addr,16)
-            end   = (start + pages * 4096) - 1
-            print(" - Range: 0x{} -> 0x{}".format(
-                hex(start)[2:].upper(),
-                hex(end)[2:].upper()
-            ))
-            if pages:
-                # Check if we have a CR2 address match - and if not
-                # check entry size if auto enabling
-                if self.cr2:
-                    # Check the address and see if any of our CR2 addresses fall
-                    # within that
-                    for c in self.cr2:
-                        if start <= c <= end:
-                            # Got a match
-                            matches.append("0x{}".format(hex(c)[2:].upper()))
-                            if not c in cr2_found:
-                                cr2_found.append(c)
-                    if matches:
-                        print(" -> Matched CR2: {}".format(", ".join(matches)))
+                addr = l.split("OCABC: MMIO devirt ")[1].split(" (")[0]
+                try:
+                    pages = int(l.split("(")[1].split()[0],16)
+                    size = self.get_size(pages*4096,strip_zeroes=True)
+                    page = " (0x{} page{} - {})".format(
+                        hex(pages)[2:].upper(),
+                        "" if pages == 1 else "s",
+                        size
+                    )
+                except:
+                    pages = 0
+                    page = ""
+                print("Located MMIO devirt: {}{}".format(addr,page))
+                enabled = False
+                comment = ""
+                matches = []
+                start = int(addr,16)
+                end   = (start + pages * 4096) - 1
+                print(" - Range: 0x{} -> 0x{}".format(
+                    hex(start)[2:].upper(),
+                    hex(end)[2:].upper()
+                ))
+                if pages:
+                    # Check if we have a CR2 address match - and if not
+                    # check entry size if auto enabling
+                    if self.cr2:
+                        # Check the address and see if any of our CR2 addresses fall
+                        # within that
+                        for c in self.cr2:
+                            if start <= c <= end:
+                                # Got a match
+                                matches.append("0x{}".format(hex(c)[2:].upper()))
+                                if not c in cr2_found:
+                                    cr2_found.append(c)
+                        if matches:
+                            print(" -> Matched CR2: {}".format(", ".join(matches)))
+                            print(" -> Enabling...")
+                            comment = " - Matched CR2: {}".format(", ".join(matches))
+                            enabled = True
+                    # Only check entry size if auto enabling, and not already
+                    # enabled
+                    if self.auto_disable and not enabled and \
+                    pages * 4096 < self.get_key_at_index(
+                        self.auto_disable_dict,
+                        index=self.auto_disable,
+                        default=0
+                    ):
+                        print(" -> Within {} Threshold".format(size_threshold_value))
                         print(" -> Enabling...")
-                        comment = " - Matched CR2: {}".format(", ".join(matches))
+                        comment = " - Within {} Threshold".format(size_threshold_value)
                         enabled = True
-                # Only check entry size if auto enabling, and not already
-                # enabled
-                if self.auto_disable and not enabled and \
-                pages * 4096 < self.auto_disable_size.get(self.auto_disable,0):
-                    print(" -> Cannot Fit Kernel")
-                    print(" -> Enabling...")
-                    comment = " - Cannot Fit Kernel"
-                    enabled = True
-            mmio_devirt.append({
-                "Comment" : "MMIO devirt {}{}{}".format(
-                    addr,
-                    page,
-                    comment
-                ),
-                "Address" : start,
-                "Enabled" : enabled
-            })
-            #except Exception as e:
-            #    print(" - Failed: {}".format(e))
+                mmio_devirt.append({
+                    "Comment" : "MMIO devirt {}{}{}".format(
+                        addr,
+                        page,
+                        comment
+                    ),
+                    "Address" : start,
+                    "Enabled" : enabled
+                })
+            except Exception as e:
+                print(" - Failed: {}".format(e))
         if not mmio_devirt:
             print("")
             print("No MMIO devirt entries found!")
