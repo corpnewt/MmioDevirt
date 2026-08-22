@@ -9,9 +9,9 @@ class MmioDevirt:
         self.auto_disable = 0
         self.auto_disable_dict = {
                           0:"Disabled",
-            128 * 1024 ** 2:"Extremely Lucky <= 128 MB",
-            64  * 1024 ** 2:"Very Lucky <= 64 MB",
-            32  * 1024 ** 2:"Lucky <= 32 MB"
+            128 * 1024 ** 2:"Extremely Lucky < 128 MB",
+            64  * 1024 ** 2:"Very Lucky < 64 MB",
+            32  * 1024 ** 2:"Lucky < 32 MB"
         }
         self.cr2 = []
 
